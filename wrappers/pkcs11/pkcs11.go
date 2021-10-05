@@ -24,29 +24,41 @@ type Wrapper struct {
 	logger hclog.Logger
 
 	keylabel  string
-	config    *crypto11.Config
 	context   *crypto11.Context
 	secretKey *crypto11.SecretKey
 }
 
 var _ wrapping.Wrapper = (*Wrapper)(nil)
 
+func (k *Wrapper) Debug(msg string, args ...interface{}) {
+	if k.logger != nil {
+		k.logger.Debug(msg)
+	} else {
+		fmt.Printf(msg)
+	}
+}
+
 // NewWrapper creates a new AWSKMS wrapper with the provided options
 func NewWrapper(opts *wrapping.WrapperOptions) *Wrapper {
 	if opts == nil {
 		opts = new(wrapping.WrapperOptions)
 	}
-	k := &Wrapper{}
+	k := &Wrapper{
+
+		logger: opts.Logger,
+	}
 	return k
 }
 
 func (k *Wrapper) Init(_ context.Context) error {
+	k.Debug("Init")
 	return nil
 
 }
 
 func (k *Wrapper) Encrypt(_ context.Context, plaintext, aad []byte) (blob *wrapping.EncryptedBlobInfo, err error) {
-	fmt.Printf("Encrypt")
+
+	k.Debug("Encrypt")
 	if plaintext == nil {
 		return nil, fmt.Errorf("given plaintext for encryption is nil")
 	}
@@ -87,7 +99,7 @@ func (k *Wrapper) Encrypt(_ context.Context, plaintext, aad []byte) (blob *wrapp
 
 func (k *Wrapper) Decrypt(_ context.Context, in *wrapping.EncryptedBlobInfo, aad []byte) (pt []byte, err error) {
 
-	fmt.Printf("Decrypt")
+	k.Debug("Decrypt")
 
 	if in == nil {
 		return nil, errors.New("given input for decryption is nil")
@@ -100,7 +112,7 @@ func (k *Wrapper) Decrypt(_ context.Context, in *wrapping.EncryptedBlobInfo, aad
 	wrappedKey := in.KeyInfo.WrappedKey
 
 	iv, ciphertext := wrappedKey[:16], wrappedKey[32:]
-	fmt.Printf("wrappedKey size %d", len(wrappedKey))
+	k.Debug("wrappedKey size %d", len(wrappedKey))
 	decrypter, err := k.secretKey.NewCBCDecrypterCloser(iv)
 	if err != nil {
 		return nil, fmt.Errorf("error in creating CBC dencrypter: %w", err)
@@ -115,7 +127,13 @@ func (k *Wrapper) Decrypt(_ context.Context, in *wrapping.EncryptedBlobInfo, aad
 }
 
 func (k *Wrapper) Finalize(_ context.Context) error {
-	return k.context.Close()
+	k.Debug("PKCS11::Finalize")
+
+	if k.context != nil {
+
+		return k.context.Close()
+	}
+	return nil
 }
 func bytesToUlong(bs []byte) (n uint) {
 	sliceSize := len(bs)
@@ -150,11 +168,13 @@ func (k *Wrapper) KeySize(secretKey *crypto11.SecretKey) (uint, error) {
 
 // Type returns the wrapping type for this particular Wrapper implementation
 func (k *Wrapper) Type() string {
+	k.Debug("pkcs11::Type")
 	return wrapping.PKCS11
 }
 
 // KeyID returns the last known key id
 func (k *Wrapper) KeyID() string {
+	k.Debug("pkcs11::KeyID")
 	return k.keylabel
 }
 
@@ -176,16 +196,19 @@ func (s *Wrapper) GenerateSecretKey() {
 
 }
 func (s *Wrapper) SetConfig(config map[string]string) (map[string]string, error) {
+
+	s.Debug("SetConfig")
 	if config == nil {
 		config = map[string]string{}
 	}
-	s.config = &crypto11.Config{}
+	crypto11Config := &crypto11.Config{}
 	var libpath string = config["lib"]
 	if libpath == "" {
 		return nil, fmt.Errorf("lib parameter is not found in this configuration")
 	}
 
-	s.config.Path = libpath
+	crypto11Config.Path = libpath
+	s.Debug("pkcs11::SetConfig(%w)", crypto11Config.Path)
 
 	var slot string = config["slot"]
 	if slot == "" {
@@ -193,7 +216,7 @@ func (s *Wrapper) SetConfig(config map[string]string) (map[string]string, error)
 		if tokenLabel == "" {
 			return nil, fmt.Errorf("token parameter is not found in this configuration")
 		} else {
-			s.config.TokenLabel = tokenLabel
+			crypto11Config.TokenLabel = tokenLabel
 		}
 	} else {
 
@@ -202,18 +225,18 @@ func (s *Wrapper) SetConfig(config map[string]string) (map[string]string, error)
 			return nil, fmt.Errorf("slot %s is not a number", slot)
 		}
 		slotInt := int(slotnumber)
-		s.config.SlotNumber = &slotInt
+		crypto11Config.SlotNumber = &slotInt
 	}
 	var pin string = config["pin"]
 	if pin != "" {
-		s.config.Pin = pin
+		crypto11Config.Pin = pin
 
 	} else {
 		pin = os.Getenv("HSM_PIN")
 		if pin != "" {
 
 			os.Setenv("HSM_PIN", "666")
-			s.config.Pin = pin
+			crypto11Config.Pin = pin
 		} else {
 			return nil, fmt.Errorf("pin parameter is not found in this configuration")
 		}
@@ -226,9 +249,7 @@ func (s *Wrapper) SetConfig(config map[string]string) (map[string]string, error)
 		s.keylabel = keylabel
 	}
 
-	fmt.Printf("Configuration %v", s.config)
-	fmt.Printf("keylabel %s", s.keylabel)
-	context, err := crypto11.Configure(s.config)
+	context, err := crypto11.Configure(crypto11Config)
 	if err != nil {
 		return nil, fmt.Errorf("Error in configure HSM %s", err.Error())
 	}
@@ -249,6 +270,7 @@ func (s *Wrapper) SetConfig(config map[string]string) (map[string]string, error)
 		}
 		s.secretKey = secretkey
 	}
-
-	return nil, nil
+	wrapperInfo := make(map[string]string)
+	wrapperInfo["libpath"] = crypto11Config.Path
+	return wrapperInfo, nil
 }

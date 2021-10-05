@@ -42,9 +42,10 @@ func TestWrapper_LifeCycle(t *testing.T) {
 
 func initSeal(t *testing.T) *Wrapper {
 	// Skip tests if we are not running acceptance tests
-	/*if os.Getenv("VAULT_ACC") == "" {
-		t.SkipNow()
-	}*/
+	//	if os.Getenv("VAULT_ACC") == "" {
+	//	t.SkipNow()
+	//	}
+
 	s := NewWrapper(nil)
 	_, err := s.SetConfig(nil)
 	if err == nil {
@@ -64,6 +65,6 @@ func initSeal(t *testing.T) *Wrapper {
 	if err != nil {
 		t.Fatalf("error setting seal config: %v", err)
 	}
-
+	s.Finalize(nil)
 	return s
 }
