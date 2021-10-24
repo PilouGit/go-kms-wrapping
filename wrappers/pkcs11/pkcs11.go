@@ -38,7 +38,7 @@ func (k *Wrapper) Debug(msg string, args ...interface{}) {
 	}
 }
 
-// NewWrapper creates a new AWSKMS wrapper with the provided options
+// NewWrapper creates a new PKCS11 wrapper with the provided options
 func NewWrapper(opts *wrapping.WrapperOptions) *Wrapper {
 	if opts == nil {
 		opts = new(wrapping.WrapperOptions)
@@ -81,7 +81,7 @@ func (k *Wrapper) Encrypt(_ context.Context, plaintext, aad []byte) (blob *wrapp
 	sizeciphertext := (int)(k.secretKey.BlockSize()) + lensecretaeadkey
 	ciphertext := make([]byte, sizeciphertext)
 
-	blockModeCloser.CryptBlocks(ciphertext[aes.BlockSize:], env.Key)
+	blockModeCloser.CryptBlocks(ciphertext[aes.BlockSize:], secretaeadkey)
 	wrappedKey := append(iv, ciphertext...)
 	ret := &wrapping.EncryptedBlobInfo{
 		Ciphertext: env.Ciphertext,
@@ -112,7 +112,6 @@ func (k *Wrapper) Decrypt(_ context.Context, in *wrapping.EncryptedBlobInfo, aad
 	wrappedKey := in.KeyInfo.WrappedKey
 
 	iv, ciphertext := wrappedKey[:16], wrappedKey[32:]
-	k.Debug("wrappedKey size %d", len(wrappedKey))
 	decrypter, err := k.secretKey.NewCBCDecrypterCloser(iv)
 	if err != nil {
 		return nil, fmt.Errorf("error in creating CBC dencrypter: %w", err)
@@ -182,13 +181,13 @@ func (k *Wrapper) KeyID() string {
 func (k *Wrapper) HMACKeyID() string {
 	return ""
 }
-func (s *Wrapper) GenerateSecretKey() {
+func (s *Wrapper) GenerateSecretKey(keylabel string) {
 
 	id, err := uuid.GenerateRandomBytes(32)
 	if err != nil {
 		fmt.Errorf("error wrapping data: %w", err)
 	}
-	key, err := s.context.GenerateSecretKeyWithLabel(id, []byte(s.keylabel), 256, crypto11.CipherAES)
+	key, err := s.context.GenerateSecretKeyWithLabel(id, []byte(keylabel), 256, crypto11.CipherAES)
 	if err != nil {
 		fmt.Errorf("error wrapping data: %w", err)
 	}
@@ -256,7 +255,7 @@ func (s *Wrapper) SetConfig(config map[string]string) (map[string]string, error)
 	s.context = context
 	generate_key, _ := strconv.ParseBool(config["generate_key"])
 	if generate_key {
-		s.GenerateSecretKey()
+		s.GenerateSecretKey(s.keylabel)
 	} else {
 		secretkey, err := s.context.FindKey(nil, []byte(s.keylabel))
 		if err != nil {

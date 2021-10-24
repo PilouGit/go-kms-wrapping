@@ -1,4 +1,4 @@
-# Go-KMS-Wrapping - Go library for encrypting values through various KMS providers
+# Go-KMS-Wrapping (Fork) - Go library for encrypting values through various KMS providers 
 
 [![Godoc](https://godoc.org/github.com/hashicorp/go-kms-wrapping?status.svg)](https://godoc.org/github.com/hashicorp/go-kms-wrapping)
 
@@ -11,6 +11,8 @@ KMS providers -- public clouds, Vault's Transit plugin, etc. It is similar in
 concept to various other cryptosystems (like NaCl) but focuses on using third
 party KMSes. This library is the underpinning of Vault's auto-unseal
 functionality, and should be ready to use for many other applications.
+
+This fork allow to use PKCS11 KMS.
 
 For KMS providers that do not support encrypting arbitrarily large values, the
 library will generate an envelope data encryption key (DEK), encrypt the value
@@ -47,6 +49,7 @@ as they may have been used for past encryption operations.
   * * Tencent Cloud KMS (uses envelopes)
   * * Vault Transit mount
   * * Yandex.Cloud KMS (uses envelopes)
+  * * PKCS11 (uses envelopes)
   * Transparently supports multiple decryption targets, allowing for key rotation
   * Supports Additional Authenticated Data (AAD) for all KMSes except Vault Transit.
 
